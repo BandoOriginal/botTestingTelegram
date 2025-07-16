@@ -16,11 +16,14 @@ async fn main() {
     // Intervalo cada 1 hora (3600 segundos)
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
 
+    let channel_id = std::env::var("CHANNEL_ID").expect("...");
+
     loop {
-        interval.tick();
+        interval.tick().await;
 
         let mensaje = format!("📢 Nuevo post automático a las {}", Local::now().format("%Y-%m-%d %H:%M"));
-        if let Err(e) = bot.send_message(channel_id.clone(), mensaje) {
+
+        if let Err(e) = bot.send_message(channel_id.as_str(), mensaje).await {
             eprintln!("Error al enviar mensaje: {:?}", e);
         } else {
             println!("✅ Mensaje enviado a Telegram");
