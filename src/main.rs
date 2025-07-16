@@ -20,7 +20,7 @@ async fn main() {
         interval.tick();
 
         let mensaje = format!("📢 Nuevo post automático a las {}", Local::now().format("%Y-%m-%d %H:%M"));
-        if let Err(e) = bot.send_message(channel_id.clone(), mensaje).await {
+        if let Err(e) = bot.send_message(channel_id.clone(), mensaje) {
             eprintln!("Error al enviar mensaje: {:?}", e);
         } else {
             println!("✅ Mensaje enviado a Telegram");
