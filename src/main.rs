@@ -10,14 +10,12 @@ async fn main() {
 
     let bot = Bot::new(token).parse_mode(ParseMode::Html);
 
+    // Intervalo cada 1 hora (3600 segundos)
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
+    
     // Canal donde se publicará
     let channel_id = std::env::var("CHANNEL_ID")
         .expect("La variable CHANNEL_ID debe estar definida");
-
-    // Intervalo cada 1 hora (3600 segundos)
-    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
-
-    let channel_id = std::env::var("CHANNEL_ID").expect("...");
 
     loop {
         interval.tick().await;
