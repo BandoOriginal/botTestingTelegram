@@ -1,8 +1,8 @@
-plan: free
 services:
   - type: web
     name: telegram-auto-poster
     env: rust
+    plan: free
     buildCommand: cargo build --release
     startCommand: ./target/release/telegram_auto_poster
     envVars:
