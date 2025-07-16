@@ -17,7 +17,7 @@ async fn main() {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
 
     loop {
-        interval.tick().await;
+        interval.tick();
 
         let mensaje = format!("📢 Nuevo post automático a las {}", Local::now().format("%Y-%m-%d %H:%M"));
         if let Err(e) = bot.send_message(channel_id.clone(), mensaje).await {
