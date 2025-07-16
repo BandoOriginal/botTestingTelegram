@@ -1,4 +1,4 @@
-plan: starter
+plan: free
 services:
   - type: web
     name: telegram-auto-poster
