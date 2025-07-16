@@ -14,7 +14,7 @@ async fn main() {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
 
     // Canal donde se publicará
-    let mut channel_id = std::env::var("CHANNEL_ID")
+    let channel_id = std::env::var("CHANNEL_ID")
         .expect("La variable CHANNEL_ID debe estar definida");
 
     loop {
@@ -22,7 +22,7 @@ async fn main() {
 
         let mensaje = format!("📢 Nuevo post automático a las {}", Local::now().format("%Y-%m-%d %H:%M"));
         if let Err(e) = bot
-            .send_message(channel_id, mensaje)
+            .send_message(channel_id.clone(), mensaje)
             .send()
             .await
         {
