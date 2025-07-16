@@ -1,6 +1,12 @@
+plan: starter
 services:
   - type: web
     name: telegram-auto-poster
     env: rust
     buildCommand: cargo build --release
     startCommand: ./target/release/telegram_auto_poster
+    envVars:
+      - key: TELOXIDE_TOKEN
+        sync: false
+      - key: CHANNEL_ID
+        sync: false
