@@ -7,9 +7,10 @@ async fn main() {
     // Obtiene el token desde una variable de entorno
     let token = std::env::var("TELOXIDE_TOKEN")
         .expect("La variable TELOXIDE_TOKEN debe estar definida");
+
     let bot = Bot::new(token).parse_mode(ParseMode::Html);
 
-    // Canal donde se publicará (ejemplo: "-1001234567890" o "@nombre_canal")
+    // Canal donde se publicará
     let channel_id = std::env::var("CHANNEL_ID")
         .expect("La variable CHANNEL_ID debe estar definida");
 
@@ -22,8 +23,13 @@ async fn main() {
         interval.tick().await;
 
         let mensaje = format!("📢 Nuevo post automático a las {}", Local::now().format("%Y-%m-%d %H:%M"));
+<<<<<<< HEAD
 
-        if let Err(e) = bot.send_message(channel_id.as_str(), mensaje).await {
+        if let Err(e) = bot
+            .send_message(channel_id.as_str(), mensaje)
+            .send()
+            .await
+        {
             eprintln!("Error al enviar mensaje: {:?}", e);
         } else {
             println!("✅ Mensaje enviado a Telegram");
