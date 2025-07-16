@@ -23,8 +23,6 @@ async fn main() {
         interval.tick().await;
 
         let mensaje = format!("📢 Nuevo post automático a las {}", Local::now().format("%Y-%m-%d %H:%M"));
-<<<<<<< HEAD
-
         if let Err(e) = bot
             .send_message(channel_id.as_str(), mensaje)
             .send()
