@@ -12,9 +12,9 @@ async fn main() {
 
     // Intervalo cada 1 hora (3600 segundos)
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(3600));
-    
+
     // Canal donde se publicará
-    let channel_id = std::env::var("CHANNEL_ID")
+    let mut channel_id = std::env::var("CHANNEL_ID")
         .expect("La variable CHANNEL_ID debe estar definida");
 
     loop {
