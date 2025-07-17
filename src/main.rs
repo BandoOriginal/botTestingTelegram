@@ -1,4 +1,4 @@
-use teloxide::prelude::*;
+/*use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use chrono::Local;
 
@@ -30,5 +30,25 @@ async fn main() {
         } else {
             println!("✅ Mensaje enviado a Telegram");
         }
+    }
+}*/
+use std::env;
+
+#[tokio::main]
+async fn main() {
+    // Imprimir todas las variables de entorno
+    for (key, value) in env::vars() {
+        println!("{}: {}", key, value);
+    }
+
+    // Intentar leer las variables críticas
+    match env::var("TELOXIDE_TOKEN") {
+        Ok(token) => println!("Token encontrado: {}", token),
+        Err(e) => eprintln!("Error al leer TELOXIDE_TOKEN: {}", e),
+    }
+
+    match env::var("CHANNEL_ID") {
+        Ok(id) => println!("Channel ID encontrado: {}", id),
+        Err(e) => eprintln!("Error al leer CHANNEL_ID: {}", e),
     }
 }
