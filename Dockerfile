@@ -1,5 +1,5 @@
 # Usamos una imagen oficial de Rust
-FROM rust:1.70-slim
+FROM rust:1.85-slim
 
 # Instalamos dependencias del sistema necesarias
 RUN apt-get update && \
