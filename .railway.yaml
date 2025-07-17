@@ -1,0 +1,11 @@
+# .railway.yml
+
+serviceName: telegram-auto-poster
+envVars:
+  - key: TELOXIDE_TOKEN
+    sync: false
+  - key: CHANNEL_ID
+    sync: false
+
+up:
+  - cmd: ./target/release/telegram_auto_poster
