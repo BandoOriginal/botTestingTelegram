@@ -4,37 +4,35 @@ use std::time::Duration;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use teloxide::types::InputFile;
+use reqwest::Url;
 use serde::Deserialize;
-use url::Url;
-use reqwest::header::{HeaderMap, USER_AGENT};
 
-// Nombre del archivo local para guardar la última ID procesada
+// Ruta del archivo que guarda la última ID procesada
 const LAST_ID_FILE: &str = "last_id.txt";
 
-// URL de la API (ajústala si necesitas tags específicos)
-const API_URL: &str = "https://e621.net/posts.json?limit=20";
+// URL de la API de e621 (ajústala según tus necesidades)
+const API_URL: &str = "https://e621.net/posts.json?tags=notglacier+order:id_desc&limit=20";
 
-// Estructuras para deserializar el JSON de la API
 #[derive(Debug, Deserialize)]
 struct E621Response {
     posts: Vec<Post>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct Post {
     id: i64,
     file: File,
     tags: Tags,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct File {
     url: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct Tags {
-    artist: Vec<String>,
+    artist: Option<Vec<String>>,
 }
 
 #[tokio::main]
@@ -55,11 +53,12 @@ async fn main() {
 
     // Enviar cada imagen nueva
     for post in &nuevos_posts {
+        let artist = post.tags.artist.as_ref().map_or("Unknown".to_string(), |a| a.join(", "));
         let url = Url::parse(post.file.url.as_str()).expect("❌ URL inválida");
         let photo = InputFile::url(url);
         if let Err(e) = bot
             .send_photo(channel_id.clone(), photo)
-            .caption(format!("🎨 Nuevo arte de: {}", post.tags.artist.join(", ")))
+            .caption(format!("🎨 Nuevo arte de: {}", artist))
             .send()
             .await
         {
@@ -68,23 +67,20 @@ async fn main() {
             println!("✅ Imagen {} enviada", post.id);
         }
     }
+
     // Guardar la última ID procesada
     if let Some(post) = nuevos_posts.last() {
         save_last_id(&post.id.to_string()).expect("❌ No se pudo guardar la última ID");
     }
 }
 
-// Función que hace la llamada a la API
+// Función que llama a la API y filtra los nuevos posts
 async fn fetch_nuevos_posts() -> Vec<Post> {
     let client = reqwest::Client::new();
 
-    // Preparar headers (algunas APIs requieren User-Agent)
-    let mut headers = HeaderMap::new();
-    headers.insert(USER_AGENT, "TelegramAutoPoster/1.0".parse().unwrap());
-
     let response = client
         .get(API_URL)
-        .headers(headers)
+        .header("User-Agent", "TelegramAutoPoster/1.0")
         .timeout(Duration::from_secs(10))
         .send()
         .await
