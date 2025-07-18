@@ -11,7 +11,7 @@ use serde::Deserialize;
 const LAST_ID_FILE: &str = "last_id.txt";
 
 // URL de la API de e621 (ajústala según tus necesidades)
-const API_URL: &str = "https://e621.net/posts.json?tags=notglacier+order:id_desc&limit=20";
+const API_URL: &str = "https://e621.net/posts.json?tags=femboy+order:id_desc&limit=20";
 
 #[derive(Debug, Deserialize)]
 struct E621Response {
