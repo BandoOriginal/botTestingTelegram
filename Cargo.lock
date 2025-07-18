@@ -1322,10 +1322,12 @@ name = "telegram_auto_poster"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "reqwest",
  "serde",
  "teloxide",
  "tokio",
  "tokio-util 0.6.10",
+ "url",
 ]
 
 [[package]]

@@ -7,9 +7,10 @@ edition = "2021"
 teloxide = "0.8"
 tokio = { version = "1", features = ["full"] }
 chrono = "0.4"
+reqwest = { version = "0.11", features = ["json", "blocking"] }
 serde = { version = "1.0", features = ["derive"] }
 tokio-util = { version = "0.6", features = ["codec"] }
-
+url = "2.4" 
 [[bin]]
 name = "telegram_auto_poster"
 path = "src/main.rs"
