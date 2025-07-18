@@ -10,8 +10,6 @@ use serde::Deserialize;
 // Ruta del archivo que guarda la última ID procesada
 const LAST_ID_FILE: &str = "last_id.txt";
 
-// URL de la API de e621 (ajústala según tus necesidades)
-const API_URL: &str = "https://e621.net/posts.json?tags=femboy+order:id_desc&limit=20";
 
 #[derive(Debug, Deserialize)]
 struct E621Response {
@@ -43,6 +41,7 @@ async fn main() {
 
     let bot = Bot::new(token).parse_mode(ParseMode::Html);
 
+
     // Fetch de nuevos posts
     let nuevos_posts = fetch_nuevos_posts().await;
 
@@ -50,6 +49,7 @@ async fn main() {
         println!("No hay nuevos posts.");
         return;
     }
+    
 
     // Enviar cada imagen nueva
     for post in &nuevos_posts {
@@ -69,17 +69,22 @@ async fn main() {
     }
 
     // Guardar la última ID procesada
-    if let Some(post) = nuevos_posts.last() {
-        save_last_id(&post.id.to_string()).expect("❌ No se pudo guardar la última ID");
-    }
+    let last_id = nuevos_posts[0].id;
+    save_last_id(&last_id.to_string()).expect("❌ No se pudo guardar la última ID");
 }
-
+fn build_api_url(last_id: &str) -> String {
+    format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a{}", last_id)
+}
 // Función que llama a la API y filtra los nuevos posts
 async fn fetch_nuevos_posts() -> Vec<Post> {
     let client = reqwest::Client::new();
-
+    let last_id = read_last_id();
+    let mut api_url: String = build_api_url(&last_id.clone().unwrap_or_default());
+    if last_id == None { 
+        api_url = build_api_url("0");
+    };
     let response = client
-        .get(API_URL)
+        .get(api_url)
         .header("User-Agent", "TelegramAutoPoster/1.0")
         .timeout(Duration::from_secs(10))
         .send()
@@ -89,17 +94,11 @@ async fn fetch_nuevos_posts() -> Vec<Post> {
         .await
         .expect("❌ Error al parsear JSON");
 
-    let last_id = read_last_id();
 
-    // Filtrar posts nuevos
+    // Filtrar posts nuevos por ID
     response
         .posts
         .into_iter()
-        .filter(|p| {
-            last_id
-                .as_ref()
-                .map_or(true, |saved_id| p.id > saved_id.parse::<i64>().unwrap_or(0))
-        })
         .collect()
 }
 
