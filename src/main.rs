@@ -81,7 +81,7 @@ async fn fetch_nuevos_posts() -> Vec<Post> {
     let last_id = read_last_id();
     let mut api_url: String = build_api_url(&last_id.clone().unwrap_or_default());
     if last_id == None { 
-        api_url = build_api_url("102300");
+        api_url = build_api_url("1000000");
     };
     let response = client
         .get(api_url)
