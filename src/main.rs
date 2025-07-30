@@ -55,7 +55,7 @@ async fn main() {
     // Enviar cada imagen nueva
     for post in &nuevos_posts {
         let artist = post.tags.artist.as_ref().map_or("Unknown".to_string(), |a| a.join(", "));
-        let url = Url::parse(post.file.url.as_str()).expect("❌ URL inválida");
+        let url = Url::parse(post.file.url.as_ref().expect("❌ Falta URL")).expect("❌ URL inválida");
         let photo = InputFile::url(url);
         if let Err(e) = bot
             .send_photo(channel_id.clone(), photo)
