@@ -25,7 +25,8 @@ struct Post {
 
 #[derive(Debug, Deserialize, Clone)]
 struct File {
-    url: String,
+    #[serde(default)]
+    url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -81,7 +82,7 @@ async fn fetch_nuevos_posts() -> Vec<Post> {
     let last_id = read_last_id();
     let mut api_url: String = build_api_url(&last_id.clone().unwrap_or_default());
     if last_id == None { 
-        api_url = build_api_url("1000000");
+        api_url = build_api_url("10000000");
     };
     let response = client
         .get(api_url)
@@ -99,6 +100,7 @@ async fn fetch_nuevos_posts() -> Vec<Post> {
     response
         .posts
         .into_iter()
+        .filter(|post| post.file.url.is_some())
         .collect()
 }
 
