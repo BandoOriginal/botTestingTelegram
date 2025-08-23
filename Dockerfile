@@ -1,4 +1,4 @@
-FROM rust:1.80 as builder
+FROM rust:nightly as builder
 
 WORKDIR /app
 COPY . .
@@ -11,4 +11,3 @@ WORKDIR /app
 COPY --from=builder /app/target/release/rust-cron-job /usr/local/bin/app
 
 CMD ["app"]
-
