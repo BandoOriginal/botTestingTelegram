@@ -1,121 +1,120 @@
-use std::fs;
-use std::path::Path;
 use std::time::Duration;
-use teloxide::prelude::*;
-use teloxide::types::ParseMode;
-use teloxide::types::InputFile;
+use axum::{Router, routing::get, response::IntoResponse};
 use reqwest::Url;
 use serde::Deserialize;
-
-// Ruta del archivo que guarda la última ID procesada
-const LAST_ID_FILE: &str = "last_id.txt";
-
+use teloxide::prelude::*;
+use teloxide::types::{ParseMode, InputFile};
+use sqlx::{PgPool, postgres::PgPoolOptions};
+use anyhow::Result;
 
 #[derive(Debug, Deserialize)]
-struct E621Response {
-    posts: Vec<Post>,
-}
+struct E621Response { posts: Vec<Post> }
 
 #[derive(Debug, Deserialize, Clone)]
-struct Post {
-    id: i64,
-    file: File,
-    tags: Tags,
-}
+struct Post { id: i64, file: File, tags: Tags }
 
 #[derive(Debug, Deserialize, Clone)]
-struct File {
-    #[serde(default)]
-    url: Option<String>,
-}
+struct File { #[serde(default)] url: Option<String> }
 
 #[derive(Debug, Deserialize, Clone)]
-struct Tags {
-    artist: Option<Vec<String>>,
-}
+struct Tags { artist: Option<Vec<String>> }
+
+const SOURCE_NAME: &str = "e621";
 
 #[tokio::main]
-async fn main() {
-    // Cargar variables de entorno
-    let token = std::env::var("TELOXIDE_TOKEN").expect("TELOXIDE_TOKEN debe estar definido");
-    let channel_id = std::env::var("CHANNEL_ID").expect("CHANNEL_ID debe estar definido");
+async fn main() -> Result<()> {
+    // Pool de Postgres
+    let database_url = std::env::var("DATABASE_URL")?;
+    let pool = PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url).await?;
 
+    // Crear tabla si no existe
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS last_id_tracker (
+            source_name TEXT PRIMARY KEY,
+            last_post_id BIGINT NOT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        );"
+    )
+    .execute(&pool).await?;
+
+    // Servidor HTTP para cron-job.org
+    let pool_clone = pool.clone();
+    let app = Router::new().route("/run", get(move || run_job_handler(pool_clone.clone())));
+    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
+    let addr = format!("0.0.0.0:{}", port).parse()?;
+    println!("🚀 Server listening on {}", addr);
+    axum::Server::bind(&addr).serve(app.into_make_service()).await?;
+    Ok(())
+}
+
+async fn run_job_handler(pool: PgPool) -> impl IntoResponse {
+    match run_job(pool).await {
+        Ok(msg) => msg,
+        Err(e) => format!("❌ Error: {:?}", e),
+    }
+}
+
+async fn run_job(pool: PgPool) -> Result<String> {
+    let token = std::env::var("TELOXIDE_TOKEN")?;
+    let channel_id = std::env::var("CHANNEL_ID")?;
     let bot = Bot::new(token).parse_mode(ParseMode::Html);
 
+    // Leer la última ID desde DB
+    let last_id: Option<i64> = sqlx::query_scalar(
+        "SELECT last_post_id FROM last_id_tracker WHERE source_name = $1"
+    )
+    .bind(SOURCE_NAME)
+    .fetch_optional(&pool).await?;
 
-    // Fetch de nuevos posts
-    let nuevos_posts = fetch_nuevos_posts().await;
-
-    if nuevos_posts.is_empty() {
-        println!("No hay nuevos posts.");
-        return;
-    }
-    
-
-    // Enviar cada imagen nueva
-    for post in &nuevos_posts {
-        let artist = post.tags.artist.as_ref().map_or("Unknown".to_string(), |a| a.join(", "));
-        let url = Url::parse(post.file.url.as_ref().expect("❌ Falta URL")).expect("❌ URL inválida");
-        let photo = InputFile::url(url);
-        if let Err(e) = bot
-            .send_photo(channel_id.clone(), photo)
-            .caption(format!("🎨 Nuevo arte de: {}", artist))
-            .send()
-            .await
-        {
-            eprintln!("❌ Error al enviar imagen {}: {:?}", post.id, e);
-        } else {
-            println!("✅ Imagen {} enviada", post.id);
-        }
-    }
-
-    // Guardar la última ID procesada
-    let last_id = nuevos_posts[0].id;
-    save_last_id(&last_id.to_string()).expect("❌ No se pudo guardar la última ID");
-}
-fn build_api_url(last_id: &str) -> String {
-    format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a{}", last_id)
-}
-// Función que llama a la API y filtra los nuevos posts
-async fn fetch_nuevos_posts() -> Vec<Post> {
-    let client = reqwest::Client::new();
-    let last_id = read_last_id();
-    let mut api_url: String = build_api_url(&last_id.clone().unwrap_or_default());
-    if last_id == None { 
-        api_url = build_api_url("10000000");
+    let api_url = if let Some(id) = last_id {
+        format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a{}", id)
+    } else {
+        format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a10000000")
     };
-    let response = client
-        .get(api_url)
+
+    let response = reqwest::Client::new()
+        .get(&api_url)
         .header("User-Agent", "TelegramAutoPoster/1.0")
         .timeout(Duration::from_secs(10))
-        .send()
-        .await
-        .expect("❌ Error al hacer GET a la API")
-        .json::<E621Response>()
-        .await
-        .expect("❌ Error al parsear JSON");
+        .send().await?
+        .json::<E621Response>().await?;
 
-
-    // Filtrar posts nuevos por ID
-    response
-        .posts
-        .into_iter()
-        .filter(|post| post.file.url.is_some())
-        .collect()
-}
-
-// Leer la última ID desde el archivo
-fn read_last_id() -> Option<String> {
-    if Path::new(LAST_ID_FILE).exists() {
-        fs::read_to_string(LAST_ID_FILE)
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-    } else {
-        None
+    if response.posts.is_empty() {
+        return Ok("No hay nuevos posts.".to_string());
     }
-}
 
-// Guardar la última ID en el archivo
-fn save_last_id(id: &str) -> std::io::Result<()> {
-    fs::write(LAST_ID_FILE, id)
+    let mut max_id = last_id.unwrap_or(0);
+
+    for post in &response.posts {
+        if let Some(url_str) = &post.file.url {
+            if let Ok(url) = Url::parse(url_str) {
+                let photo = InputFile::url(url);
+                let artist = post.tags.artist.as_ref().map_or("Unknown".to_string(), |a| a.join(", "));
+                if let Err(e) = bot.send_photo(channel_id.clone(), photo)
+                    .caption(format!("🎨 Nuevo arte de: {}", artist))
+                    .send().await
+                {
+                    eprintln!("❌ Error al enviar imagen {}: {:?}", post.id, e);
+                } else {
+                    println!("✅ Imagen {} enviada", post.id);
+                }
+            }
+        }
+        if post.id > max_id { max_id = post.id; } // Guardamos siempre la mayor ID
+    }
+
+    // Guardar la última ID en DB
+    sqlx::query(
+        "INSERT INTO last_id_tracker (source_name, last_post_id)
+         VALUES ($1, $2)
+         ON CONFLICT (source_name)
+         DO UPDATE SET last_post_id = $2, updated_at = NOW()"
+    )
+    .bind(SOURCE_NAME)
+    .bind(max_id)
+    .execute(&pool).await?;
+
+    Ok(format!("✅ {} posts procesados", response.posts.len()))
 }
