@@ -1,5 +1,6 @@
 use std::time::Duration;
 use axum::{Router, routing::get, response::IntoResponse};
+use axum::Server; // <-- Import necesario para axum 0.7
 use reqwest::Url;
 use serde::Deserialize;
 use teloxide::prelude::*;
@@ -45,7 +46,12 @@ async fn main() -> Result<()> {
     let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
     let addr = format!("0.0.0.0:{}", port).parse()?;
     println!("🚀 Server listening on {}", addr);
-    axum::Server::bind(&addr).serve(app.into_make_service()).await?;
+
+    // ⚡ Cambio principal: usar Server::bind
+    Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await?;
+
     Ok(())
 }
 
