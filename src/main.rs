@@ -1,5 +1,6 @@
 use std::time::Duration;
 use axum::{Router, routing::get, response::IntoResponse};
+use hyper::Server; // ✅ Import necesario
 use reqwest::Url;
 use serde::Deserialize;
 use teloxide::prelude::*;
@@ -27,7 +28,8 @@ async fn main() -> Result<()> {
     let database_url = std::env::var("DATABASE_URL")?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
-        .connect(&database_url).await?;
+        .connect(&database_url)
+        .await?;
 
     // Crear tabla si no existe
     sqlx::query(
@@ -37,7 +39,8 @@ async fn main() -> Result<()> {
             updated_at TIMESTAMP NOT NULL DEFAULT NOW()
         );"
     )
-    .execute(&pool).await?;
+    .execute(&pool)
+    .await?;
 
     // Servidor HTTP para cron-job.org
     let pool_clone = pool.clone();
@@ -46,8 +49,8 @@ async fn main() -> Result<()> {
     let addr = format!("0.0.0.0:{}", port).parse()?;
     println!("🚀 Server listening on {}", addr);
 
-    // ⚡ Usar axum::Server directamente
-    axum::Server::bind(&addr)
+    // Usar hyper::Server
+    Server::bind(&addr)
         .serve(app.into_make_service())
         .await?;
 
@@ -71,7 +74,8 @@ async fn run_job(pool: PgPool) -> Result<String> {
         "SELECT last_post_id FROM last_id_tracker WHERE source_name = $1"
     )
     .bind(SOURCE_NAME)
-    .fetch_optional(&pool).await?;
+    .fetch_optional(&pool)
+    .await?;
 
     let api_url = if let Some(id) = last_id {
         format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a{}", id)
@@ -83,8 +87,10 @@ async fn run_job(pool: PgPool) -> Result<String> {
         .get(&api_url)
         .header("User-Agent", "TelegramAutoPoster/1.0")
         .timeout(Duration::from_secs(10))
-        .send().await?
-        .json::<E621Response>().await?;
+        .send()
+        .await?
+        .json::<E621Response>()
+        .await?;
 
     if response.posts.is_empty() {
         return Ok("No hay nuevos posts.".to_string());
@@ -99,7 +105,8 @@ async fn run_job(pool: PgPool) -> Result<String> {
                 let artist = post.tags.artist.as_ref().map_or("Unknown".to_string(), |a| a.join(", "));
                 if let Err(e) = bot.send_photo(channel_id.clone(), photo)
                     .caption(format!("🎨 Nuevo arte de: {}", artist))
-                    .send().await
+                    .send()
+                    .await
                 {
                     eprintln!("❌ Error al enviar imagen {}: {:?}", post.id, e);
                 } else {
@@ -119,7 +126,8 @@ async fn run_job(pool: PgPool) -> Result<String> {
     )
     .bind(SOURCE_NAME)
     .bind(max_id)
-    .execute(&pool).await?;
+    .execute(&pool)
+    .await?;
 
     Ok(format!("✅ {} posts procesados", response.posts.len()))
 }
