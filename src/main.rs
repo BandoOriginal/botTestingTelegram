@@ -31,14 +31,12 @@ const SOURCE_NAME: &str = "e621";
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Pool de Postgres (DATABASE_URL debe estar en env)
     let database_url = std::env::var("DATABASE_URL")?;
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .connect(&database_url)
         .await?;
 
-    // Crear tabla si no existe
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS last_id_tracker (
             source_name TEXT PRIMARY KEY,
@@ -49,12 +47,10 @@ async fn main() -> Result<()> {
     .execute(&pool)
     .await?;
 
-    // Construir el router y pasar el pool como Extension
     let app = Router::new()
         .route("/run", get(run_job_handler))
         .layer(Extension(pool.clone()));
 
-    // Listener / puerto
     let port: u16 = std::env::var("PORT").ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(8080);
@@ -66,28 +62,27 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// Handler que devuelve output limpio para cron-job.org
 async fn run_job_handler(Extension(pool): Extension<PgPool>) -> Response {
-    match run_job(pool).await {
-        Ok(msg) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
-            msg,
-        ).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
-            format!("❌ Error: {:?}", e),
-        ).into_response(),
-    }
+    // Lanzamos el trabajo pesado en segundo plano
+    tokio::spawn(async move {
+        if let Err(e) = run_job(pool).await {
+            eprintln!("❌ Error en run_job: {:?}", e);
+        }
+    });
+
+    // Respondemos rápido a cron-job
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "⏳ Job lanzado en background, revisa logs o Telegram.".to_string(),
+    ).into_response()
 }
 
-async fn run_job(pool: PgPool) -> Result<String> {
+async fn run_job(pool: PgPool) -> Result<()> {
     let token = std::env::var("TELOXIDE_TOKEN")?;
     let channel_id = std::env::var("CHANNEL_ID")?;
     let bot = Bot::new(token).parse_mode(ParseMode::Html);
 
-    // Leer la última ID desde DB
     let last_id: Option<i64> = sqlx::query_scalar(
         "SELECT last_post_id FROM last_id_tracker WHERE source_name = $1"
     )
@@ -111,7 +106,8 @@ async fn run_job(pool: PgPool) -> Result<String> {
         .await?;
 
     if response.posts.is_empty() {
-        return Ok("No hay nuevos posts.".to_string());
+        println!("ℹ️ No hay nuevos posts.");
+        return Ok(());
     }
 
     let mut max_id = last_id.unwrap_or(0);
@@ -122,6 +118,7 @@ async fn run_job(pool: PgPool) -> Result<String> {
                 let photo = InputFile::url(url);
                 let artist = post.tags.artist.as_ref()
                     .map_or("Unknown".to_string(), |a| a.join(", "));
+
                 if let Err(e) = bot.send_photo(channel_id.clone(), photo)
                     .caption(format!("🎨 Nuevo arte de: {}", artist))
                     .send()
@@ -145,5 +142,6 @@ async fn run_job(pool: PgPool) -> Result<String> {
     .execute(&pool)
     .await?;
 
-    Ok(format!("{} posts procesados", response.posts.len()))
+    println!("✅ {} posts procesados", response.posts.len());
+    Ok(())
 }
