@@ -1,6 +1,12 @@
 use std::net::SocketAddr;
 use std::time::Duration;
-use axum::{Router, routing::get, response::IntoResponse, extract::Extension};
+use axum::{
+    Router,
+    routing::get,
+    response::{IntoResponse, Response},
+    extract::Extension,
+    http::{StatusCode, header},
+};
 use tokio::net::TcpListener;
 use reqwest::Url;
 use serde::Deserialize;
@@ -56,17 +62,23 @@ async fn main() -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     println!("🚀 Listening on {}", listener.local_addr()?);
 
-    // Usar axum::serve (recomendado en axum 0.7)
     axum::serve(listener, app).await?;
-
     Ok(())
 }
 
-// Handler que extrae la pool desde Extension
-async fn run_job_handler(Extension(pool): Extension<PgPool>) -> impl IntoResponse {
+// Handler que devuelve output limpio para cron-job.org
+async fn run_job_handler(Extension(pool): Extension<PgPool>) -> Response {
     match run_job(pool).await {
-        Ok(msg) => msg,
-        Err(e) => format!("❌ Error: {:?}", e),
+        Ok(msg) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            msg,
+        ).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+            format!("❌ Error: {:?}", e),
+        ).into_response(),
     }
 }
 
@@ -105,8 +117,6 @@ async fn run_job(pool: PgPool) -> Result<String> {
     let mut max_id = last_id.unwrap_or(0);
 
     for post in &response.posts {
-        // Si URL es None o inválida, la ignoramos para enviar,
-        // pero igualmente consideramos la ID para avanzar el cursor.
         if let Some(url_str) = &post.file.url {
             if let Ok(url) = Url::parse(url_str) {
                 let photo = InputFile::url(url);
@@ -118,20 +128,12 @@ async fn run_job(pool: PgPool) -> Result<String> {
                     .await
                 {
                     eprintln!("❌ Error al enviar imagen {}: {:?}", post.id, e);
-                } else {
-                    println!("✅ Imagen {} enviada", post.id);
                 }
-            } else {
-                eprintln!("⚠️ URL inválida para post {}: {}", post.id, url_str);
             }
-        } else {
-            eprintln!("⚠️ URL nula para post {}", post.id);
         }
-
-        if post.id > max_id { max_id = post.id; } // Siempre avanzamos el cursor
+        if post.id > max_id { max_id = post.id; }
     }
 
-    // Guardar la última ID en DB (insert o update)
     sqlx::query(
         "INSERT INTO last_id_tracker (source_name, last_post_id)
          VALUES ($1, $2)
@@ -143,5 +145,5 @@ async fn run_job(pool: PgPool) -> Result<String> {
     .execute(&pool)
     .await?;
 
-    Ok(format!("✅ {} posts procesados", response.posts.len()))
+    Ok(format!("{} posts procesados", response.posts.len()))
 }
