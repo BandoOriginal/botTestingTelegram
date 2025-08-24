@@ -86,7 +86,7 @@ async fn run_job(pool: PgPool) -> Result<String> {
     let api_url = if let Some(id) = last_id {
         format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a{}", id)
     } else {
-        format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a10000000")
+        format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a250000")
     };
 
     let response = reqwest::Client::new()
