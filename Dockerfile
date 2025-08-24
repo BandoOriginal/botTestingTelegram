@@ -7,7 +7,7 @@ RUN cargo build --release
 
 FROM debian:bookworm-slim
 WORKDIR /app
-
-COPY --from=builder /app/target/release/rust-cron-job /usr/local/bin/app
+# Reemplaza telegram_auto_poster si tu bin se llama distinto
+COPY --from=builder /out/bin/telegram_auto_poster /usr/local/bin/app
 
 CMD ["app"]
