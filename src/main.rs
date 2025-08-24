@@ -1,6 +1,5 @@
 use std::time::Duration;
 use axum::{Router, routing::get, response::IntoResponse};
-use hyper::Server; // <-- ahora viene de hyper
 use reqwest::Url;
 use serde::Deserialize;
 use teloxide::prelude::*;
@@ -47,8 +46,8 @@ async fn main() -> Result<()> {
     let addr = format!("0.0.0.0:{}", port).parse()?;
     println!("🚀 Server listening on {}", addr);
 
-    // ⚡ Server de hyper
-    Server::bind(&addr)
+    // ⚡ Usar axum::Server directamente
+    axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await?;
 
