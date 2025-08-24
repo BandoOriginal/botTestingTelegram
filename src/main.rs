@@ -1,16 +1,4 @@
 use std::net::SocketAddr;
-}
-}
-
-
-async fn run_job(pool: PgPool) -> Result<String> {
-let token = std::env::var("TELOXIDE_TOKEN")?;
-let channel_id = std::env::var("CHANNEL_ID")?;
-let bot = Bot::new(token).parse_mode(ParseMode::Html);
-
-
-// Leer la última ID desde DB
-let last_id: Option<i64> = sqlx::query_scalar(
 "SELECT last_post_id FROM last_id_tracker WHERE source_name = $1"
 )
 .bind(SOURCE_NAME)
