@@ -1,6 +1,7 @@
+use std::net::SocketAddr;
 use std::time::Duration;
-use axum::{Router, routing::get, response::IntoResponse};
-use hyper::Server; // ✅ Import necesario
+use axum::{Router, routing::get, response::IntoResponse, extract::Extension};
+use tokio::net::TcpListener;
 use reqwest::Url;
 use serde::Deserialize;
 use teloxide::prelude::*;
@@ -42,22 +43,27 @@ async fn main() -> Result<()> {
     .execute(&pool)
     .await?;
 
-    // Servidor HTTP para cron-job.org
-    let pool_clone = pool.clone();
-    let app = Router::new().route("/run", get(move || run_job_handler(pool_clone.clone())));
-    let port = std::env::var("PORT").unwrap_or_else(|_| "8080".to_string());
-    let addr = format!("0.0.0.0:{}", port).parse()?;
-    println!("🚀 Server listening on {}", addr);
+    // Construir el router y pasar el pool como Extension
+    let app = Router::new()
+        .route("/run", get(run_job_handler))
+        .layer(Extension(pool.clone()));
 
-    // Usar hyper::Server
-    Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await?;
+    // Listener / puerto
+    let port: u16 = std::env::var("PORT").ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8080);
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let listener = TcpListener::bind(addr).await?;
+    println!("🚀 Listening on {}", listener.local_addr()?);
+
+    // Usar axum::serve (sencillo, recomendado por axum 0.7)
+    axum::serve(listener, app).await?;
 
     Ok(())
 }
 
-async fn run_job_handler(pool: PgPool) -> impl IntoResponse {
+// Handler que extrae la pool desde Extension
+async fn run_job_handler(Extension(pool): Extension<PgPool>) -> impl IntoResponse {
     match run_job(pool).await {
         Ok(msg) => msg,
         Err(e) => format!("❌ Error: {:?}", e),
@@ -74,8 +80,7 @@ async fn run_job(pool: PgPool) -> Result<String> {
         "SELECT last_post_id FROM last_id_tracker WHERE source_name = $1"
     )
     .bind(SOURCE_NAME)
-    .fetch_optional(&pool)
-    .await?;
+    .fetch_optional(&pool).await?;
 
     let api_url = if let Some(id) = last_id {
         format!("https://e621.net/posts.json?tags=femboy+rating:s+order:id_desc&page=a{}", id)
@@ -99,10 +104,13 @@ async fn run_job(pool: PgPool) -> Result<String> {
     let mut max_id = last_id.unwrap_or(0);
 
     for post in &response.posts {
+        // Si URL es None o inválida, la ignoramos para enviar,
+        // pero igualmente consideramos la ID para avanzar el cursor.
         if let Some(url_str) = &post.file.url {
             if let Ok(url) = Url::parse(url_str) {
                 let photo = InputFile::url(url);
-                let artist = post.tags.artist.as_ref().map_or("Unknown".to_string(), |a| a.join(", "));
+                let artist = post.tags.artist.as_ref()
+                    .map_or("Unknown".to_string(), |a| a.join(", "));
                 if let Err(e) = bot.send_photo(channel_id.clone(), photo)
                     .caption(format!("🎨 Nuevo arte de: {}", artist))
                     .send()
@@ -112,12 +120,17 @@ async fn run_job(pool: PgPool) -> Result<String> {
                 } else {
                     println!("✅ Imagen {} enviada", post.id);
                 }
+            } else {
+                eprintln!("⚠️ URL inválida para post {}: {}", post.id, url_str);
             }
+        } else {
+            eprintln!("⚠️ URL nula para post {}", post.id);
         }
-        if post.id > max_id { max_id = post.id; } // Guardamos siempre la mayor ID
+
+        if post.id > max_id { max_id = post.id; } // Siempre avanzamos el cursor
     }
 
-    // Guardar la última ID en DB
+    // Guardar la última ID en DB (insert o update)
     sqlx::query(
         "INSERT INTO last_id_tracker (source_name, last_post_id)
          VALUES ($1, $2)
