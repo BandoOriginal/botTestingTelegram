@@ -49,6 +49,7 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .route("/run", get(run_job_handler))
+        .route("/ping", get(ping_handler)) // ✅ nueva ruta de healthcheck
         .layer(Extension(pool.clone()));
 
     let port: u16 = std::env::var("PORT").ok()
@@ -60,6 +61,14 @@ async fn main() -> Result<()> {
 
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+async fn ping_handler() -> Response {
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "ok".to_string(),
+    ).into_response()
 }
 
 async fn run_job_handler(Extension(pool): Extension<PgPool>) -> Response {
